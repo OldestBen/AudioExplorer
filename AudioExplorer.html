@@ -3,542 +3,556 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Audio Archive</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Courier+Prime:ital,wght@0,400;0,700;1,400&family=Bebas+Neue&display=swap" rel="stylesheet">
+<title>Audio Archive V3 - Final DSP & NLP</title>
+<link href="https://fonts.googleapis.com/css2?family=Courier+Prime:ital,wght@0,400;0,700;1,400&family=Bebas+Neue&family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
 <style>
+  /* Variables & Themes */
   :root {
-    --bg:      #0d0d0d;
-    --surface: #141414;
-    --border:  #2a2a2a;
-    --accent:  #c8a84b;
-    --red:     #8b1a1a;
-    --text:    #d4cfc8;
-    --muted:   #6b6560;
-    --playing: #1e1a12;
+    --bg: #0d0d0d; --surface: #141414; --border: #2a2a2a; --accent: #c8a84b; 
+    --red: #8b1a1a; --text: #d4cfc8; --muted: #6b6560; --playing: #1e1a12; 
+    --font-base: 'Courier Prime', 'Roboto Mono', monospace;
+    --font-size: 13px; --density-pad: 14px 20px;
   }
+  body[data-theme="terminal"] { --bg: #000; --surface: #051005; --border: #003300; --accent: #33ff33; --red: #ff3333; --text: #00ff00; --muted: #007700; --playing: #002200; }
+  body[data-theme="ocean"] { --bg: #0f172a; --surface: #1e293b; --border: #334155; --accent: #38bdf8; --red: #ef4444; --text: #f1f5f9; --muted: #94a3b8; --playing: #020617; }
+  body[data-layout="grid"] .entry-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 15px; padding: 20px; align-items: start; }
+  body[data-zen="true"] header, body[data-zen="true"] .controls, body[data-zen="true"] .sidebar { display: none !important; }
 
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--font-base); font-size: var(--font-size); min-height: 100vh; overflow-x: hidden; padding-bottom: 140px; display: flex; }
+  
+  /* Layout */
+  .sidebar { width: 300px; border-right: 1px solid var(--border); padding: 20px; display: flex; flex-direction: column; gap: 20px; background: var(--surface); flex-shrink: 0; }
+  .main-content { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 
-  body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: 'Courier Prime', monospace;
-    min-height: 100vh;
-  }
-
-  /* ── Scanlines ── */
-  body::after {
-    content: '';
-    pointer-events: none;
-    position: fixed;
-    inset: 0;
-    background: repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(0,0,0,0.07) 4px);
-    z-index: 9999;
-  }
-
-  /* ════════════════════════════════
-     LANDING / PICKER SCREEN
-  ════════════════════════════════ */
-  #landing {
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 40px 24px;
-    text-align: center;
-    position: relative;
-    overflow: hidden;
-  }
-  #landing::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: repeating-linear-gradient(0deg, transparent, transparent 23px, rgba(255,255,255,0.018) 24px);
-    pointer-events: none;
-  }
-
-  .landing-eyebrow {
-    font-size: 11px;
-    letter-spacing: 0.3em;
-    color: var(--red);
-    text-transform: uppercase;
-    margin-bottom: 14px;
-  }
-  .landing-title {
-    font-family: 'Bebas Neue', sans-serif;
-    font-size: clamp(52px, 10vw, 100px);
-    letter-spacing: 0.06em;
-    color: var(--accent);
-    line-height: 1;
-    margin-bottom: 24px;
-  }
-  .landing-sub {
-    font-size: 13px;
-    color: var(--muted);
-    letter-spacing: 0.08em;
-    line-height: 1.8;
-    max-width: 400px;
-    margin-bottom: 48px;
-  }
-  .landing-sub strong { color: var(--text); }
-
-  /* Drop zone */
-  #drop-zone {
-    width: 100%;
-    max-width: 460px;
-    border: 1px dashed var(--border);
-    padding: 48px 32px;
-    cursor: pointer;
-    transition: border-color 0.2s, background 0.2s;
-    position: relative;
-  }
-  #drop-zone:hover, #drop-zone.drag-over {
-    border-color: var(--accent);
-    background: rgba(200,168,75,0.04);
-  }
-  #drop-zone .dz-icon { color: var(--accent); margin-bottom: 16px; opacity: 0.7; }
-  #drop-zone .dz-main {
-    font-size: 14px;
-    font-weight: 700;
-    letter-spacing: 0.1em;
-    color: var(--text);
-    margin-bottom: 8px;
-  }
-  #drop-zone .dz-sub {
-    font-size: 11px;
-    letter-spacing: 0.12em;
-    color: var(--muted);
-  }
-
-  /* Hidden folder input */
-  #folder-input {
-    position: absolute;
-    inset: 0;
-    opacity: 0;
-    cursor: pointer;
-    width: 100%;
-    height: 100%;
-  }
-
-  .landing-note {
-    margin-top: 24px;
-    font-size: 11px;
-    color: var(--muted);
-    letter-spacing: 0.1em;
-    max-width: 400px;
-    line-height: 1.7;
-  }
-  .landing-note strong { color: var(--red); }
-
-  /* ════════════════════════════════
-     ARCHIVE SCREEN
-  ════════════════════════════════ */
-  #archive { display: none; }
-
-  header {
-    border-bottom: 1px solid var(--border);
-    padding: 48px 60px 36px;
-    position: relative;
-    overflow: hidden;
-  }
-  header::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: repeating-linear-gradient(0deg, transparent, transparent 23px, rgba(255,255,255,0.018) 24px);
-    pointer-events: none;
-  }
-  .header-label { font-size: 11px; letter-spacing: 0.25em; color: var(--red); text-transform: uppercase; margin-bottom: 10px; }
-  .header-title { font-family: 'Bebas Neue', sans-serif; font-size: clamp(42px, 6vw, 80px); letter-spacing: 0.06em; color: var(--accent); line-height: 1; margin-bottom: 16px; }
-  .header-meta { font-size: 12px; color: var(--muted); letter-spacing: 0.12em; }
-  .header-meta span { color: var(--text); }
-  .reload-btn {
-    position: absolute;
-    top: 48px; right: 60px;
-    background: transparent;
-    border: 1px solid var(--border);
-    color: var(--muted);
-    font-family: 'Courier Prime', monospace;
-    font-size: 11px;
-    letter-spacing: 0.15em;
-    padding: 8px 16px;
-    cursor: pointer;
-    text-transform: uppercase;
-    transition: border-color 0.15s, color 0.15s;
-  }
-  .reload-btn:hover { border-color: var(--accent); color: var(--accent); }
-
-  .controls {
-    padding: 20px 60px;
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    gap: 16px;
-    align-items: center;
-  }
-  .search-wrap { position: relative; flex: 1; max-width: 440px; }
-  .search-wrap svg { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); opacity: 0.35; pointer-events: none; }
-  input[type=search] {
-    width: 100%;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    color: var(--text);
-    font-family: 'Courier Prime', monospace;
-    font-size: 13px;
-    padding: 9px 12px 9px 36px;
-    outline: none;
-    letter-spacing: 0.05em;
-    transition: border-color 0.15s;
-  }
-  input[type=search]:focus { border-color: var(--accent); }
-  input[type=search]::placeholder { color: var(--muted); }
-  .count-badge { font-size: 11px; letter-spacing: 0.15em; color: var(--muted); white-space: nowrap; }
-  .count-badge span { color: var(--accent); }
-
-  .entry-list { padding: 32px 60px 80px; display: flex; flex-direction: column; gap: 2px; }
-
-  .entry {
-    border: 1px solid var(--border);
-    background: var(--surface);
-    transition: border-color 0.15s, background 0.15s;
-  }
+  button, select, input { font-family: inherit; font-size: inherit; background: var(--surface); border: 1px solid var(--border); color: var(--text); padding: 6px 12px; cursor: pointer; transition: 0.2s; }
+  button:hover { border-color: var(--accent); }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  input[type="range"] { cursor: w-resize; accent-color: var(--accent); }
+  
+  /* DSP Controls (EQ / Pan) */
+  .dsp-panel { border: 1px solid var(--border); padding: 15px; border-radius: 4px; display: flex; flex-direction: column; gap: 10px; font-size: 11px; }
+  .eq-sliders { display: flex; justify-content: space-between; height: 100px; width: 100%; overflow: hidden; padding: 5px 0; }
+  .eq-band { -webkit-appearance: slider-vertical; appearance: slider-vertical; width: 15px; min-width: 10px; height: 100%; margin: 0; padding: 0; flex-shrink: 1; cursor: n-resize; }
+  
+  /* Transcripts & Entries */
+  .entry-list { padding: 20px 40px; display: flex; flex-direction: column; gap: 4px; }
+  .entry { border: 1px solid var(--border); background: var(--bg); position: relative; }
   .entry.is-playing { border-color: var(--accent); background: var(--playing); }
-  .entry.hidden { display: none; }
+  .entry-head { display: flex; align-items: center; gap: 12px; padding: var(--density-pad); cursor: pointer; }
+  
+  /* NLP Styling */
+  .speaker-a { color: #38bdf8; font-weight: bold; }
+  mark { background: var(--accent); color: var(--bg); }
 
-  .entry-head {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    padding: 14px 20px;
-    cursor: pointer;
-    user-select: none;
-  }
-  .entry-index { font-size: 11px; color: var(--muted); letter-spacing: 0.1em; min-width: 32px; }
-  .entry-name { flex: 1; font-size: 14px; font-weight: 700; letter-spacing: 0.08em; color: var(--text); word-break: break-all; }
-  .no-txt-badge {
-    font-size: 10px;
-    letter-spacing: 0.12em;
-    color: var(--red);
-    border: 1px solid var(--red);
-    padding: 2px 7px;
-    opacity: 0.7;
-    flex-shrink: 0;
-  }
+  .transcript-wrap { background: rgba(0,0,0,0.3); border-left: 2px solid var(--red); padding: 15px; margin: 10px 20px; outline: none; white-space: pre-wrap; line-height: 1.6;}
+  .transcript-wrap[contenteditable="true"]:focus { border: 1px dashed var(--accent); }
 
-  .play-btn {
-    width: 34px; height: 34px;
-    border: 1px solid var(--border);
-    background: transparent;
-    color: var(--accent);
-    cursor: pointer;
-    display: flex; align-items: center; justify-content: center;
-    flex-shrink: 0;
-    transition: background 0.15s, border-color 0.15s;
-  }
-  .play-btn:hover { background: rgba(200,168,75,0.1); border-color: var(--accent); }
-  .entry.is-playing .play-btn { background: rgba(200,168,75,0.15); border-color: var(--accent); }
+  /* Player PIP & Controls */
+  #player { position: fixed; bottom: 0; left: 0; right: 0; background: var(--surface); border-top: 1px solid var(--accent); padding: 10px 20px; display: flex; align-items: center; gap: 15px; z-index: 1000; }
+  #player.pip { bottom: 20px; right: 20px; left: auto; width: 400px; border: 1px solid var(--accent); border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,0.8); flex-direction: column; }
+  
+  .waveform-container { flex: 1; height: 40px; background: var(--bg); position: relative; cursor: pointer; border-radius: 4px; overflow: hidden; width: 100%; }
+  #waveform-canvas { width: 100%; height: 100%; pointer-events: none; }
+  .playhead { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--red); left: 0; pointer-events: none; box-shadow: 0 0 10px var(--red); }
+  .loop-marker { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--accent); opacity: 0.5; pointer-events: none; }
 
-  .chevron { width: 18px; height: 18px; flex-shrink: 0; color: var(--muted); transition: transform 0.25s; }
-  .entry.expanded .chevron { transform: rotate(180deg); }
-
-  .entry-body { display: none; border-top: 1px solid var(--border); padding: 0 20px 20px; }
-  .entry.expanded .entry-body { display: block; }
-
-  audio {
-    width: 100%;
-    margin: 16px 0 18px;
-    accent-color: var(--accent);
-    height: 34px;
-  }
-
-  .transcript-label { font-size: 10px; letter-spacing: 0.25em; color: var(--red); text-transform: uppercase; margin-bottom: 8px; }
-  .transcript-text {
-    font-size: 13px;
-    line-height: 1.8;
-    color: var(--text);
-    white-space: pre-wrap;
-    padding: 14px 16px;
-    background: rgba(0,0,0,0.3);
-    border-left: 2px solid var(--red);
-    letter-spacing: 0.02em;
-  }
-  .no-transcript { font-style: italic; color: var(--muted); font-size: 13px; }
-
-  #no-results { display: none; padding: 60px; text-align: center; color: var(--muted); font-size: 13px; letter-spacing: 0.1em; }
-
-  @media (max-width: 700px) {
-    header, .controls, .entry-list { padding-left: 20px; padding-right: 20px; }
-    .reload-btn { top: 20px; right: 20px; }
-  }
+  #toast { position: fixed; bottom: 80px; right: 20px; background: var(--accent); color: var(--bg); padding: 10px 20px; z-index: 2000; display: none; font-weight: bold; border-radius: 4px; }
+  
+  /* Loading Screen */
+  #loading-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 9999; display: flex; align-items: center; justify-content: center; color: var(--accent); font-size: 24px; font-family: 'Bebas Neue', sans-serif; display: none; flex-direction: column; gap: 10px;}
 </style>
 </head>
 <body>
 
-<!-- ── Landing ── -->
-<div id="landing">
-  <div class="landing-eyebrow">Recovered Audio &#x25A0; Leaked Build</div>
-  <div class="landing-title">Audio Archive</div>
-  <p class="landing-sub">
-    Select the folder containing your <strong>.mp3</strong> and <strong>.txt</strong> files.<br>
-    Everything stays on your machine — nothing is uploaded.
-  </p>
-
-  <div id="drop-zone">
-    <input type="file" id="folder-input" webkitdirectory accept=".mp3,.txt">
-    <div class="dz-icon">
-      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-        <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-      </svg>
-    </div>
-    <div class="dz-main">Click to select folder</div>
-    <div class="dz-sub">or drag &amp; drop your folder here</div>
-  </div>
-
-  <p class="landing-note">
-    <strong>Note:</strong> Keep this HTML file anywhere — it only needs access to your folder when you load it.
-    Matching is automatic: files with the same name (e.g. <em>vo_001.mp3</em> + <em>vo_001.txt</em>) are paired together.
-  </p>
+<div id="loading-overlay">
+  <div>Processing Files...</div>
+  <div id="load-progress" style="font-size: 16px; color: var(--text);">0%</div>
 </div>
 
-<!-- ── Archive ── -->
-<div id="archive">
-  <header>
-    <div class="header-label">Recovered Audio &#x2014; Leaked Build</div>
-    <div class="header-title">Audio Archive</div>
-    <div class="header-meta" id="header-meta"></div>
-    <button class="reload-btn" id="reload-btn">&#x21BA; Change Folder</button>
+<div class="sidebar" id="sidebar">
+  <h2 style="color:var(--accent); font-family:'Bebas Neue'; letter-spacing:1px;">Settings</h2>
+  <select id="theme-sel" onchange="Settings.update('theme', this.value)">
+    <option value="dark">Dark</option><option value="terminal">Terminal</option>
+    <option value="ocean">Ocean</option>
+  </select>
+  <button onclick="Settings.update('layout', Settings.layout==='grid'?'list':'grid')">⊞ Toggle Grid/List</button>
+  <button onclick="Settings.update('zen', !Settings.zen)">🧘 Zen Mode</button>
+  <button onclick="document.getElementById('player').classList.toggle('pip')">🗔 Pop-out Player</button>
+  
+  <div class="dsp-panel">
+    <strong style="color:var(--accent);">AI Transcription</strong>
+    <button id="btn-transcribe" onclick="window.WhisperAI.transcribeActive()" style="font-weight:bold;">🤖 Auto-Transcribe Active</button>
+    <div style="font-size:9px; color:var(--muted);">Uses local Whisper-tiny CPU inference. Model downloads once (~40MB).</div>
+  </div>
+
+  <div class="dsp-panel">
+    <strong style="color:var(--accent);">DSP Audio Engine</strong>
+    <label><input type="checkbox" id="dsp-norm"> Gain Boost (Norm)</label>
+    <label><input type="checkbox" id="dsp-trim"> Skip Silence (FFT)</label>
+    
+    <label style="margin-top:10px;">10-Band Master EQ</label>
+    <div class="eq-sliders" id="eq-container"></div>
+    
+    <label style="margin-top:10px;">Spatial Pan (L/R)</label>
+    <input type="range" id="pan-slider" min="-1" max="1" step="0.1" value="0" style="width:100%;">
+  </div>
+</div>
+
+<div class="main-content">
+  <header style="padding: 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
+    <div>
+      <h1 style="color:var(--accent); font-family:'Bebas Neue', sans-serif; font-size: 42px; line-height: 1;">Archive V3</h1>
+      <div id="stats" style="font-size: 11px; color: var(--muted); margin-top: 5px;">Awaiting Folder...</div>
+    </div>
+    <div>
+      <input type="file" id="folder-input" webkitdirectory accept=".mp3,.txt,.wav" style="display:none;">
+      <button onclick="document.getElementById('folder-input').click()" style="border-color:var(--accent); color:var(--accent); font-weight: bold;">📂 Import Folder</button>
+    </div>
   </header>
 
-  <div class="controls">
-    <div class="search-wrap">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-      </svg>
-      <input type="search" id="search" placeholder="Search filenames or transcripts&#x2026;" autocomplete="off">
-    </div>
-    <div class="count-badge">Showing <span id="visible-count">0</span> of <span id="total-count">0</span></div>
+  <div class="controls" style="padding: 15px 20px; border-bottom: 1px solid var(--border); display: flex; gap: 10px; background: var(--bg); position: sticky; top:0; z-index:100; align-items: center; flex-wrap: wrap;">
+    <input type="search" id="search" placeholder="Regex / Text search..." style="flex:1; min-width: 200px;">
+    <select id="filter-sel">
+      <option value="all">All Files</option>
+      <option value="missing">Missing TXT</option>
+    </select>
+    <select id="sort-sel">
+      <option value="name">Name (A-Z)</option>
+      <option value="played">Most Played</option>
+    </select>
   </div>
 
   <div class="entry-list" id="entry-list"></div>
-  <div id="no-results">No matching entries found.</div>
 </div>
 
+<div id="player">
+  <div style="display: flex; gap: 5px; width: 100%; justify-content: center;">
+    <button onclick="Player.prev()">⏮</button>
+    <button id="btn-play" onclick="Player.toggle()" style="color:var(--accent); font-weight:bold;">▶</button>
+    <button onclick="Player.next()">⏭</button>
+    <button id="btn-reverse" onclick="Player.toggleReverse()">⏪ Rev</button>
+  </div>
+  
+  <div class="waveform-container" id="wave-wrap">
+    <canvas id="waveform-canvas"></canvas>
+    <div class="playhead" id="playhead"></div>
+    <div class="loop-marker" id="loop-a" style="display:none;"></div>
+    <div class="loop-marker" id="loop-b" style="display:none;"></div>
+  </div>
+
+  <div style="display: flex; gap: 10px; align-items: center; width: 100%; justify-content: space-between;">
+    <span id="time-display" style="font-size: 11px; white-space: nowrap;">0:00 / 0:00</span>
+    <div style="display:flex; gap: 5px;">
+        <select id="speed-sel" title="Playback Speed"><option value="0.5">0.5x</option><option value="1" selected>1.0x</option><option value="2">2.0x</option></select>
+        <button onclick="Player.setLoopMode()" title="A-B Loop">🔁 A/B</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
 <script>
-let currentAudio = null;
-let currentEntry = null;
-
-// ── File loading ──────────────────────────────────────
-document.getElementById('folder-input').addEventListener('change', function () {
-  handleFiles(Array.from(this.files));
-});
-
-// Drag and drop
-const dropZone = document.getElementById('drop-zone');
-document.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
-document.addEventListener('dragleave', e => { if (!e.relatedTarget) dropZone.classList.remove('drag-over'); });
-document.addEventListener('drop', e => {
-  e.preventDefault();
-  dropZone.classList.remove('drag-over');
-  const items = e.dataTransfer.items;
-  if (!items) return;
-
-  // Collect all files from dropped items (including directories via webkitGetAsEntry)
-  const filePromises = [];
-  for (const item of items) {
-    if (item.kind === 'file') {
-      const entry = item.webkitGetAsEntry ? item.webkitGetAsEntry() : null;
-      if (entry && entry.isDirectory) {
-        filePromises.push(readDirectory(entry));
-      } else {
-        const f = item.getAsFile();
-        if (f) filePromises.push(Promise.resolve([f]));
-      }
-    }
+const MetaStore = {
+  data: JSON.parse(localStorage.getItem('archive_meta_v3') || '{}'),
+  save() { localStorage.setItem('archive_meta_v3', JSON.stringify(this.data)); },
+  get(id) { return this.data[id] || { plays: 0, editedTxt: null }; },
+  update(id, key, val) {
+    if(!this.data[id]) this.data[id] = { plays: 0, editedTxt: null };
+    this.data[id][key] = val;
+    this.save();
   }
-  Promise.all(filePromises).then(arrays => {
-    handleFiles(arrays.flat());
-  });
-});
+};
 
-function readDirectory(dirEntry) {
-  return new Promise((resolve) => {
-    const reader = dirEntry.createReader();
-    const results = [];
-    function readBatch() {
-      reader.readEntries(entries => {
-        if (!entries.length) { resolve(results); return; }
-        const promises = entries.map(e => {
-          if (e.isFile) return new Promise(res => e.file(f => res(f), () => res(null)));
-          if (e.isDirectory) return readDirectory(e);
-          return Promise.resolve([]);
-        });
-        Promise.all(promises).then(batches => {
-          batches.forEach(b => b && (Array.isArray(b) ? results.push(...b) : results.push(b)));
-          readBatch();
-        });
-      });
-    }
-    readBatch();
-  });
-}
+const State = {
+  db: [], filtered: [],
+  activeIdx: -1, isPlaying: false,
+  loopA: null, loopB: null, reverse: false
+};
 
-// ── Process files ──────────────────────────────────────
-function handleFiles(files) {
+const Settings = {
+  theme: localStorage.getItem('theme') || 'dark',
+  layout: localStorage.getItem('layout') || 'list',
+  zen: false,
+  update(key, val) { 
+    this[key] = val; localStorage.setItem(key, val); 
+    document.body.setAttribute(`data-${key}`, val);
+  }
+};
+
+document.body.setAttribute('data-theme', Settings.theme);
+document.body.setAttribute('data-layout', Settings.layout);
+
+document.getElementById('folder-input').addEventListener('change', async (e) => {
+  const files = Array.from(e.target.files);
+  if(!files.length) return;
+  
+  document.getElementById('loading-overlay').style.display = 'flex';
+  document.getElementById('load-progress').innerText = 'Organizing files...';
+
   const mp3s = {}, txts = {};
   files.forEach(f => {
-    if (!f) return;
-    const name = f.name;
-    const ext  = name.split('.').pop().toLowerCase();
-    const stem = name.slice(0, name.lastIndexOf('.'));
-    if (ext === 'mp3') mp3s[stem] = f;
-    if (ext === 'txt') txts[stem] = f;
+    if(f.name.startsWith('._') || f.name === '.DS_Store') return;
+    const ext = f.name.split('.').pop().toLowerCase();
+    const stem = f.name.slice(0, -(ext.length+1));
+    if(['mp3','wav'].includes(ext)) mp3s[stem] = f;
+    if(ext === 'txt') txts[stem] = f;
   });
 
-  const stems = Object.keys(mp3s).sort();
-  if (!stems.length) {
-    alert('No .mp3 files found in the selected folder.');
-    return;
+  State.db = [];
+  const keys = Object.keys(mp3s);
+  
+  for(let i=0; i<keys.length; i++) {
+    const key = keys[i];
+    let txt = null;
+    if(txts[key]) txt = await txts[key].text();
+    const meta = MetaStore.get(key);
+    
+    State.db.push({
+      id: key, name: mp3s[key].name, file: mp3s[key],
+      transcript: meta.editedTxt !== null ? meta.editedTxt : txt,
+      plays: meta.plays
+    });
+    if (i % 50 === 0) document.getElementById('load-progress').innerText = `Parsed ${i} of ${keys.length}...`;
   }
-
-  // Read all txt files, then build
-  const txtPromises = stems.map(stem => {
-    if (txts[stem]) {
-      return txts[stem].text().then(t => ({ stem, txt: t.trim() })).catch(() => ({ stem, txt: null }));
-    }
-    return Promise.resolve({ stem, txt: null });
-  });
-
-  Promise.all(txtPromises).then(resolved => {
-    const pairs = resolved.map(({ stem, txt }) => ({
-      name: stem,
-      audioFile: mp3s[stem],
-      transcript: txt,
-    }));
-    buildArchive(pairs);
-  });
-}
-
-// ── Build archive ──────────────────────────────────────
-function buildArchive(pairs) {
-  document.getElementById('landing').style.display = 'none';
-  document.getElementById('archive').style.display = 'block';
-
-  const total = pairs.length;
-  const noTxt = pairs.filter(p => p.transcript === null).length;
-
-  document.getElementById('header-meta').innerHTML =
-    `<span>${total}</span> file${total !== 1 ? 's' : ''} recovered` +
-    (noTxt ? ` &nbsp;&#x25A0;&nbsp; <span style="color:var(--red)">${noTxt}</span> missing transcript${noTxt !== 1 ? 's' : ''}` : '');
-  document.getElementById('total-count').textContent = total;
-  document.getElementById('visible-count').textContent = total;
-
-  const list = document.getElementById('entry-list');
-  list.innerHTML = '';
-  currentAudio = null;
-  currentEntry = null;
-
-  pairs.forEach((item, i) => {
-    const el = document.createElement('div');
-    el.className = 'entry';
-    el.dataset.name = item.name.toLowerCase();
-    el.dataset.transcript = (item.transcript || '').toLowerCase();
-
-    const hasTranscript = item.transcript !== null;
-    const transcriptHTML = hasTranscript
-      ? `<div class="transcript-text">${escapeHTML(item.transcript)}</div>`
-      : `<p class="no-transcript">No transcript file found.</p>`;
-
-    el.innerHTML = `
-      <div class="entry-head">
-        <span class="entry-index">${String(i + 1).padStart(2, '0')}</span>
-        <span class="entry-name">${escapeHTML(item.name)}</span>
-        ${!hasTranscript ? '<span class="no-txt-badge">NO TXT</span>' : ''}
-        <button class="play-btn" title="Play / Pause">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" class="icon-play"><polygon points="5,3 19,12 5,21"/></svg>
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" class="icon-pause" style="display:none"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
-        </button>
-        <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
-      </div>
-      <div class="entry-body">
-        <audio preload="none"></audio>
-        <div class="transcript-label">Transcript</div>
-        ${transcriptHTML}
-      </div>
-    `;
-
-    // Wire up audio with a blob URL (works without a server)
-    const audio = el.querySelector('audio');
-    const blobUrl = URL.createObjectURL(item.audioFile);
-    audio.src = blobUrl;
-
-    // Expand/collapse
-    el.querySelector('.entry-head').addEventListener('click', e => {
-      if (e.target.closest('.play-btn')) return;
-      el.classList.toggle('expanded');
-    });
-
-    // Play/pause
-    el.querySelector('.play-btn').addEventListener('click', e => {
-      e.stopPropagation();
-      if (!el.classList.contains('expanded')) el.classList.add('expanded');
-      if (currentAudio && currentAudio !== audio) {
-        currentAudio.pause();
-        currentAudio.currentTime = 0;
-        updatePlayUI(currentEntry, false);
-      }
-      if (audio.paused) {
-        audio.play();
-        currentAudio = audio;
-        currentEntry = el;
-        updatePlayUI(el, true);
-      } else {
-        audio.pause();
-        updatePlayUI(el, false);
-        currentAudio = null;
-        currentEntry = null;
-      }
-    });
-
-    audio.addEventListener('ended', () => {
-      updatePlayUI(el, false);
-      currentAudio = null;
-      currentEntry = null;
-    });
-
-    list.appendChild(el);
-  });
-
-  // Search
-  document.getElementById('search').value = '';
-  document.getElementById('search').oninput = function () {
-    const q = this.value.toLowerCase().trim();
-    let visible = 0;
-    document.querySelectorAll('.entry').forEach(el => {
-      const match = !q || el.dataset.name.includes(q) || el.dataset.transcript.includes(q);
-      el.classList.toggle('hidden', !match);
-      if (match) visible++;
-    });
-    document.getElementById('visible-count').textContent = visible;
-    document.getElementById('no-results').style.display = visible === 0 ? 'block' : 'none';
-  };
-}
-
-document.getElementById('reload-btn').addEventListener('click', () => {
-  document.getElementById('archive').style.display = 'none';
-  document.getElementById('landing').style.display = 'flex';
-  document.getElementById('folder-input').value = '';
+  
+  document.getElementById('loading-overlay').style.display = 'none';
+  App.filterAndSort();
+  App.toast(`Loaded ${keys.length} files securely into RAM.`);
 });
 
-function updatePlayUI(entry, playing) {
-  entry.classList.toggle('is-playing', playing);
-  entry.querySelector('.icon-play').style.display  = playing ? 'none' : '';
-  entry.querySelector('.icon-pause').style.display = playing ? ''     : 'none';
-}
+const Player = {
+  ctx: null, source: null, gain: null, panner: null, biquads: [],
+  analyser: null, audioBuffer: null, duration: 0, startTime: 0, pauseTime: 0,
+  silenceFrames: 0,
 
-function escapeHTML(str) {
-  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
+  initAudio() {
+    if(this.ctx) return;
+    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+    
+    this.gain = this.ctx.createGain();
+    this.panner = this.ctx.createStereoPanner();
+    this.analyser = this.ctx.createAnalyser();
+    this.analyser.fftSize = 2048;
+
+    const freqs = [32, 64, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
+    const eqContainer = document.getElementById('eq-container');
+    freqs.forEach(f => {
+      const bq = this.ctx.createBiquadFilter();
+      bq.type = 'peaking'; bq.frequency.value = f;
+      this.biquads.push(bq);
+      const input = document.createElement('input');
+      input.type = 'range'; input.className = 'eq-band';
+      input.min = -15; input.max = 15; input.value = 0; input.title = `${f}Hz`;
+      input.oninput = (e) => bq.gain.value = e.target.value;
+      eqContainer.appendChild(input);
+    });
+
+    for(let i=0; i<this.biquads.length-1; i++) this.biquads[i].connect(this.biquads[i+1]);
+    this.biquads[this.biquads.length-1].connect(this.panner);
+    this.panner.connect(this.gain);
+    this.gain.connect(this.analyser);
+    this.analyser.connect(this.ctx.destination);
+    
+    // Bind DSP Checkboxes live
+    document.getElementById('dsp-norm').onchange = (e) => {
+       if (this.gain) this.gain.gain.value = e.target.checked ? 2.5 : 1.0; 
+    };
+  },
+
+  async loadBuffer(file) {
+    this.initAudio();
+    const arrayBuffer = await file.arrayBuffer();
+    this.audioBuffer = await this.ctx.decodeAudioData(arrayBuffer);
+    this.duration = this.audioBuffer.duration;
+    this.drawWaveform();
+  },
+
+  play(globalIdx) {
+    if(State.activeIdx === globalIdx && State.isPlaying) { this.pause(); return; }
+    
+    if(State.activeIdx !== globalIdx) {
+      State.activeIdx = globalIdx;
+      State.db[globalIdx].plays++; 
+      MetaStore.update(State.db[globalIdx].id, 'plays', State.db[globalIdx].plays);
+      
+      this.pauseTime = 0;
+      State.loopA = null; State.loopB = null;
+      document.querySelectorAll('.loop-marker').forEach(e=>e.style.display='none');
+      
+      this.loadBuffer(State.db[globalIdx].file).then(() => this.startSource());
+      App.render();
+    } else {
+      this.startSource();
+    }
+  },
+
+  startSource() {
+    if(this.source) this.source.disconnect();
+    this.source = this.ctx.createBufferSource();
+    
+    if(State.reverse) {
+      Array.prototype.reverse.call(this.audioBuffer.getChannelData(0));
+      if(this.audioBuffer.numberOfChannels > 1) Array.prototype.reverse.call(this.audioBuffer.getChannelData(1));
+    }
+    
+    this.source.buffer = this.audioBuffer;
+    this.source.playbackRate.value = document.getElementById('speed-sel').value;
+    this.source.preservesPitch = true; 
+    this.source.connect(this.biquads[0]);
+    
+    // Apply exact Gain parameter value
+    this.gain.gain.value = document.getElementById('dsp-norm').checked ? 2.5 : 1.0;
+
+    let offset = this.pauseTime || 0;
+    if(State.loopA !== null && offset < State.loopA) offset = State.loopA;
+    
+    this.source.start(0, offset);
+    this.startTime = this.ctx.currentTime - offset;
+    State.isPlaying = true;
+    document.getElementById('btn-play').innerText = '⏸';
+    this.silenceFrames = 0; // Reset silence tracker
+    this.updateLoop();
+  },
+
+  pause() {
+    if(!this.source) return;
+    this.source.stop();
+    this.pauseTime = this.ctx.currentTime - this.startTime;
+    State.isPlaying = false;
+    document.getElementById('btn-play').innerText = '▶';
+  },
+
+  toggle() { State.isPlaying ? this.pause() : this.startSource(); },
+  toggleReverse() { State.reverse = !State.reverse; App.toast("Reverse Mode: " + (State.reverse?"ON":"OFF")); if(State.isPlaying){this.pause(); this.startSource();} },
+  
+  next() {
+    if(!State.filtered.length) return;
+    let curr = State.filtered.findIndex(x => x.id === State.db[State.activeIdx]?.id);
+    curr = curr === -1 ? 0 : curr;
+    let next = (curr + 1) % State.filtered.length;
+    this.play(State.db.findIndex(x => x.id === State.filtered[next].id));
+  },
+  prev() {
+    if(!State.filtered.length) return;
+    let curr = State.filtered.findIndex(x => x.id === State.db[State.activeIdx]?.id);
+    let prev = curr <= 0 ? State.filtered.length - 1 : curr - 1;
+    this.play(State.db.findIndex(x => x.id === State.filtered[prev].id));
+  },
+
+  drawWaveform() {
+    const cvs = document.getElementById('waveform-canvas');
+    const c = cvs.getContext('2d');
+    cvs.width = cvs.offsetWidth; cvs.height = cvs.offsetHeight;
+    
+    const raw = this.audioBuffer.getChannelData(0);
+    const step = Math.ceil(raw.length / cvs.width);
+    c.clearRect(0,0,cvs.width,cvs.height);
+    c.fillStyle = getComputedStyle(document.body).getPropertyValue('--accent');
+    
+    for(let i=0; i<cvs.width; i++) {
+      let min = 1.0, max = -1.0;
+      for(let j=0; j<step; j++) {
+        const datum = raw[(i*step)+j];
+        if (datum < min) min = datum;
+        if (datum > max) max = datum;
+      }
+      c.fillRect(i, (1+min)*cvs.height/2, 1, Math.max(1, (max-min)*cvs.height/2));
+    }
+  },
+
+  updateLoop() {
+    if(!State.isPlaying) return;
+    const curr = this.ctx.currentTime - this.startTime;
+    const p = (curr / this.duration) * 100;
+    document.getElementById('playhead').style.left = `${p}%`;
+    const fmt = (t) => { const m = Math.floor(t/60); const s = Math.floor(t%60); return `${m}:${s.toString().padStart(2,'0')}`; };
+    document.getElementById('time-display').innerText = `${fmt(curr)} / ${fmt(this.duration)}`;
+
+    // FIXED: Dynamic playbackRate manipulation for seamless silence skipping
+    if(document.getElementById('dsp-trim').checked) {
+      const data = new Uint8Array(this.analyser.frequencyBinCount);
+      this.analyser.getByteFrequencyData(data);
+      const avg = data.reduce((a,b)=>a+b,0)/data.length;
+      
+      if(avg <= 2) {
+        this.silenceFrames++;
+        if(this.silenceFrames > 5) this.source.playbackRate.value = 4.0; // Fast forward
+      } else {
+        this.silenceFrames = 0;
+        this.source.playbackRate.value = document.getElementById('speed-sel').value; // Resume
+      }
+    } else {
+        // Ensure regular speed if unchecked mid-silence
+        this.source.playbackRate.value = document.getElementById('speed-sel').value; 
+    }
+
+    if(State.loopB !== null && curr >= State.loopB) { this.pause(); this.pauseTime = State.loopA; this.startSource(); }
+    if(curr >= this.duration) this.next();
+    else requestAnimationFrame(() => this.updateLoop());
+  },
+
+  setLoopMode() {
+    const curr = this.ctx.currentTime - this.startTime;
+    if(State.loopA === null) { State.loopA = curr; document.getElementById('loop-a').style.display='block'; document.getElementById('loop-a').style.left=`${(curr/this.duration)*100}%`; App.toast("Loop Start (A) Set"); }
+    else if(State.loopB === null) { State.loopB = curr; document.getElementById('loop-b').style.display='block'; document.getElementById('loop-b').style.left=`${(curr/this.duration)*100}%`; App.toast("Loop End (B) Set"); }
+    else { State.loopA = null; State.loopB = null; document.querySelectorAll('.loop-marker').forEach(e=>e.style.display='none'); App.toast("Loop Cleared"); }
+  }
+};
+
+document.getElementById('wave-wrap').addEventListener('click', (e) => {
+  if(!Player.duration) return;
+  const rect = e.target.getBoundingClientRect();
+  const perc = (e.clientX - rect.left) / rect.width;
+  Player.pauseTime = perc * Player.duration;
+  if(State.isPlaying) { Player.pause(); Player.startSource(); }
+});
+
+document.getElementById('pan-slider').oninput = (e) => { if(Player.panner) Player.panner.pan.value = parseFloat(e.target.value); };
+document.getElementById('speed-sel').onchange = (e) => { if(Player.source) Player.source.playbackRate.value = e.target.value; };
+
+const App = {
+  filterAndSort() {
+    const q = document.getElementById('search').value;
+    const f = document.getElementById('filter-sel').value;
+    const s = document.getElementById('sort-sel').value;
+    let regex = null; try { regex = new RegExp(q, 'gi'); } catch(e) {}
+
+    State.filtered = State.db.filter(item => {
+      const matchQ = !q || (regex && regex.test(item.name)) || (regex && regex.test(item.transcript||''));
+      const matchF = f==='all' ? true : !item.transcript;
+      return matchQ && matchF;
+    });
+
+    State.filtered.sort((a,b) => {
+      if(s==='name') return a.name.localeCompare(b.name);
+      if(s==='played') return b.plays - a.plays;
+      return 0;
+    });
+    
+    document.getElementById('stats').innerText = `${State.filtered.length} files currently active`;
+    this.render();
+  },
+
+  render() {
+    const list = document.getElementById('entry-list');
+    list.innerHTML = ''; 
+    State.filtered.forEach((item) => {
+      const globalIdx = State.db.findIndex(x => x.id === item.id);
+      let txt = item.transcript || '';
+      txt = txt.replace(/(\[.*?\])/g, '<span class="speaker-a">$1</span>'); 
+      if(document.getElementById('search').value) {
+          try { txt = txt.replace(new RegExp(`(${document.getElementById('search').value})`, 'gi'), '<mark>$1</mark>'); } catch(e){}
+      }
+      const el = document.createElement('div');
+      el.className = `entry ${State.activeIdx === globalIdx ? 'is-playing' : ''}`;
+      el.innerHTML = `
+        <div class="entry-head" onclick="this.nextElementSibling.classList.toggle('hidden')">
+          <div style="flex:1;">
+            <strong>${item.name}</strong> 
+            <span style="font-size:10px; color:var(--muted)"> [Played: ${item.plays}]</span>
+          </div>
+          <button onclick="Player.play(${globalIdx}); event.stopPropagation();" style="font-weight:bold; color:var(--accent);">▶ Play</button>
+        </div>
+        <div class="transcript-wrap hidden" contenteditable="true" spellcheck="false" onblur="App.saveEdit(${globalIdx}, this.innerText)">${txt || ''}</div>
+      `;
+      list.appendChild(el);
+    });
+  },
+
+  saveEdit(globalIdx, newText) {
+    State.db[globalIdx].transcript = newText;
+    MetaStore.update(State.db[globalIdx].id, 'editedTxt', newText);
+    this.toast("Transcript saved securely.");
+  },
+  toast(msg) {
+    const t = document.getElementById('toast'); t.innerText = msg;
+    t.style.display = 'block'; setTimeout(() => t.style.display = 'none', 3000);
+  }
+};
+
+document.getElementById('search').oninput = () => App.filterAndSort();
+document.getElementById('filter-sel').onchange = () => App.filterAndSort();
+document.getElementById('sort-sel').onchange = () => App.filterAndSort();
+
+document.addEventListener('keydown', (e) => {
+  if(['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName) || document.activeElement.isContentEditable) return;
+  if(e.code === 'Space') { e.preventDefault(); Player.toggle(); }
+  if(e.code === 'ArrowRight') { Player.next(); }
+  if(e.code === 'ArrowLeft') { Player.prev(); }
+});
+</script>
+
+<script type="module">
+  import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.1/dist/transformers.min.js';
+  
+  env.allowLocalModels = false;
+  env.backends.onnx.wasm.numThreads = 1;
+
+  window.WhisperAI = {
+    model: null,
+    isProcessing: false,
+    
+    async init() {
+      if (this.model) return;
+      App.toast("Downloading Whisper Model (~40MB)... Please wait.");
+      this.model = await pipeline('automatic-speech-recognition', 'Xenova/whisper-tiny.en');
+      App.toast("AI Model ready!");
+    },
+
+    async transcribeActive() {
+      if (State.activeIdx === -1) return App.toast("Please play an audio file first.");
+      if (this.isProcessing) return App.toast("AI is currently busy...");
+      
+      const btn = document.getElementById('btn-transcribe');
+      const file = State.db[State.activeIdx].file;
+      
+      try {
+        this.isProcessing = true;
+        btn.innerText = "⏳ Loading AI Engine...";
+        btn.disabled = true;
+        
+        await this.init();
+        
+        btn.innerText = "🤖 Transcribing Audio...";
+        App.toast("Resampling audio for AI inference...");
+        
+        const tempCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const arrayBuffer = await file.arrayBuffer();
+        const decoded = await tempCtx.decodeAudioData(arrayBuffer);
+        
+        const offlineCtx = new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(1, decoded.duration * 16000, 16000);
+        const resampleSource = offlineCtx.createBufferSource();
+        resampleSource.buffer = decoded;
+        resampleSource.connect(offlineCtx.destination);
+        resampleSource.start(0);
+        
+        const resampledBuffer = await offlineCtx.startRendering();
+        const float32AudioData = resampledBuffer.getChannelData(0); 
+        
+        App.toast("Running inference... (CPU may spike)");
+        const result = await this.model(float32AudioData, { chunk_length_s: 30, stride_length_s: 5 });
+        
+        const newText = result.text.trim();
+        App.saveEdit(State.activeIdx, newText);
+        App.render();
+        App.toast("Transcription Complete!");
+        
+        const currentEntry = document.querySelector(`.entry.is-playing .transcript-wrap`);
+        if(currentEntry && currentEntry.classList.contains('hidden')) {
+           currentEntry.classList.remove('hidden');
+        }
+        
+      } catch (err) {
+        console.error(err);
+        App.toast("AI Error: " + err.message);
+      } finally {
+        this.isProcessing = false;
+        btn.innerText = "🤖 Auto-Transcribe Active";
+        btn.disabled = false;
+      }
+    }
+  };
 </script>
 </body>
 </html>
