@@ -61,6 +61,21 @@
   
   /* Loading Screen */
   #loading-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 9999; display: flex; align-items: center; justify-content: center; color: var(--accent); font-size: 24px; font-family: 'Bebas Neue', sans-serif; display: none; flex-direction: column; gap: 10px;}
+
+  /* Help Modal */
+  #help-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 9998; display: none; align-items: center; justify-content: center; }
+  #help-modal.open { display: flex; }
+  .help-panel { background: var(--surface); border: 1px solid var(--accent); padding: 30px 35px; min-width: 340px; max-width: 520px; width: 90%; }
+  .help-panel h3 { color: var(--accent); font-family: 'Bebas Neue', sans-serif; font-size: 26px; margin-bottom: 15px; letter-spacing: 1px; }
+  .shortcut-row { display: flex; justify-content: space-between; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
+  .shortcut-row:last-child { border-bottom: none; }
+  .shortcut-key { background: var(--bg); border: 1px solid var(--border); padding: 2px 8px; border-radius: 3px; color: var(--accent); font-weight: bold; font-size: 11px; }
+
+  /* Storage bar */
+  .storage-bar-track { background: var(--bg); border: 1px solid var(--border); height: 6px; border-radius: 3px; overflow: hidden; margin-top: 4px; }
+  .storage-bar-fill { height: 100%; background: var(--accent); transition: width 0.3s; }
+  .storage-bar-fill.warn { background: #f59e0b; }
+  .storage-bar-fill.danger { background: var(--red); }
 </style>
 </head>
 <body>
@@ -79,10 +94,22 @@
   <button onclick="Settings.update('layout', Settings.layout==='grid'?'list':'grid')">⊞ Toggle Grid/List</button>
   <button onclick="Settings.update('zen', !Settings.zen)">🧘 Zen Mode</button>
   <button onclick="document.getElementById('player').classList.toggle('pip')">🗔 Pop-out Player</button>
-  
+  <button onclick="App.exportTranscripts()" style="border-color:var(--accent); color:var(--accent);">⬇ Export Transcripts</button>
+  <button onclick="App.clearMetadata()" style="border-color:var(--red); color:var(--red);">✕ Clear Metadata</button>
+  <button onclick="document.getElementById('help-modal').classList.add('open')">? Keyboard Shortcuts</button>
+
+  <div style="font-size: 10px; color: var(--muted);">
+    <div style="display:flex; justify-content:space-between; margin-bottom:3px;">
+      <span>Storage Usage</span><span id="storage-pct">0%</span>
+    </div>
+    <div class="storage-bar-track"><div class="storage-bar-fill" id="storage-bar" style="width:0%"></div></div>
+  </div>
+
   <div class="dsp-panel">
     <strong style="color:var(--accent);">AI Transcription</strong>
     <button id="btn-transcribe" onclick="window.WhisperAI.transcribeActive()" style="font-weight:bold;">🤖 Auto-Transcribe Active</button>
+    <button id="btn-transcribe-all" onclick="window.WhisperAI.transcribeAll()">📋 Transcribe All Missing</button>
+    <div id="transcribe-queue-status" style="font-size:10px; color:var(--muted); display:none;"></div>
     <div style="font-size:9px; color:var(--muted);">Uses local Whisper-tiny CPU inference. Model downloads once (~40MB).</div>
   </div>
 
@@ -90,6 +117,12 @@
     <strong style="color:var(--accent);">DSP Audio Engine</strong>
     <label><input type="checkbox" id="dsp-norm"> Gain Boost (Norm)</label>
     <label><input type="checkbox" id="dsp-trim"> Skip Silence (FFT)</label>
+    <div id="silence-threshold-wrap" style="display:none;">
+      <label style="display:flex; justify-content:space-between;">
+        <span>Silence Threshold</span><span id="silence-threshold-val">2</span>
+      </label>
+      <input type="range" id="silence-threshold" min="1" max="15" value="2" step="1" style="width:100%;">
+    </div>
     
     <label style="margin-top:10px;">10-Band Master EQ</label>
     <div class="eq-sliders" id="eq-container"></div>
@@ -144,7 +177,15 @@
   <div style="display: flex; gap: 10px; align-items: center; width: 100%; justify-content: space-between;">
     <span id="time-display" style="font-size: 11px; white-space: nowrap;">0:00 / 0:00</span>
     <div style="display:flex; gap: 5px;">
-        <select id="speed-sel" title="Playback Speed"><option value="0.5">0.5x</option><option value="1" selected>1.0x</option><option value="2">2.0x</option></select>
+        <select id="speed-sel" title="Playback Speed">
+          <option value="0.5">0.5x</option>
+          <option value="0.75">0.75x</option>
+          <option value="1" selected>1.0x</option>
+          <option value="1.25">1.25x</option>
+          <option value="1.5">1.5x</option>
+          <option value="2">2.0x</option>
+          <option value="3">3.0x</option>
+        </select>
         <button onclick="Player.setLoopMode()" title="A-B Loop">🔁 A/B</button>
     </div>
   </div>
@@ -152,7 +193,44 @@
 
 <div id="toast"></div>
 
+<div id="help-modal">
+  <div class="help-panel">
+    <h3>Keyboard Shortcuts</h3>
+    <div class="shortcut-row"><span>Play / Pause</span><span class="shortcut-key">Space</span></div>
+    <div class="shortcut-row"><span>Next Track</span><span class="shortcut-key">→</span></div>
+    <div class="shortcut-row"><span>Previous Track</span><span class="shortcut-key">←</span></div>
+    <div class="shortcut-row"><span>Toggle Zen Mode</span><span class="shortcut-key">Z</span></div>
+    <div class="shortcut-row"><span>Export Transcripts</span><span class="shortcut-key">E</span></div>
+    <div class="shortcut-row"><span>Show This Help</span><span class="shortcut-key">?</span></div>
+    <div class="shortcut-row"><span>Close This Panel</span><span class="shortcut-key">Esc</span></div>
+    <br>
+    <button onclick="document.getElementById('help-modal').classList.remove('open')" style="width:100%; border-color:var(--accent); color:var(--accent);">Close</button>
+  </div>
+</div>
+
 <script>
+function debounce(fn, ms) {
+  let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };
+}
+
+function getStorageUsage() {
+  try {
+    const used = new Blob(Object.values(localStorage)).size;
+    const max = 5 * 1024 * 1024;
+    return Math.min(100, Math.round((used / max) * 100));
+  } catch(e) { return 0; }
+}
+
+function updateStorageBar() {
+  const pct = getStorageUsage();
+  const bar = document.getElementById('storage-bar');
+  const label = document.getElementById('storage-pct');
+  bar.style.width = pct + '%';
+  label.innerText = pct + '%';
+  bar.className = 'storage-bar-fill' + (pct >= 90 ? ' danger' : pct >= 70 ? ' warn' : '');
+  if(pct >= 90) App.toast('Warning: Storage nearly full (' + pct + '%). Export and clear metadata.');
+}
+
 const MetaStore = {
   data: JSON.parse(localStorage.getItem('archive_meta_v3') || '{}'),
   save() { localStorage.setItem('archive_meta_v3', JSON.stringify(this.data)); },
@@ -182,6 +260,7 @@ const Settings = {
 
 document.body.setAttribute('data-theme', Settings.theme);
 document.body.setAttribute('data-layout', Settings.layout);
+document.addEventListener('DOMContentLoaded', updateStorageBar);
 
 document.getElementById('folder-input').addEventListener('change', async (e) => {
   const files = Array.from(e.target.files);
@@ -218,6 +297,7 @@ document.getElementById('folder-input').addEventListener('change', async (e) => 
   
   document.getElementById('loading-overlay').style.display = 'none';
   App.filterAndSort();
+  updateStorageBar();
   App.toast(`Loaded ${keys.length} files securely into RAM.`);
 });
 
@@ -375,7 +455,8 @@ const Player = {
       this.analyser.getByteFrequencyData(data);
       const avg = data.reduce((a,b)=>a+b,0)/data.length;
       
-      if(avg <= 2) {
+      const silenceThreshold = parseFloat(document.getElementById('silence-threshold').value) || 2;
+      if(avg <= silenceThreshold) {
         this.silenceFrames++;
         if(this.silenceFrames > 5) this.source.playbackRate.value = 4.0; // Fast forward
       } else {
@@ -463,23 +544,63 @@ const App = {
   saveEdit(globalIdx, newText) {
     State.db[globalIdx].transcript = newText;
     MetaStore.update(State.db[globalIdx].id, 'editedTxt', newText);
+    updateStorageBar();
     this.toast("Transcript saved securely.");
   },
+
+  exportTranscripts() {
+    if(!State.db.length) return this.toast("No files loaded to export.");
+    const payload = State.db.map(item => ({
+      id: item.id, name: item.name,
+      transcript: item.transcript || '',
+      plays: item.plays
+    }));
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'transcripts_export.json';
+    a.click(); URL.revokeObjectURL(url);
+    this.toast(`Exported ${payload.length} entries.`);
+  },
+
+  clearMetadata() {
+    if(!confirm('Reset all play counts and edited transcripts? Reload the folder afterward to restore original file transcripts.')) return;
+    MetaStore.data = {};
+    MetaStore.save();
+    State.db.forEach(item => { item.plays = 0; });
+    this.filterAndSort();
+    updateStorageBar();
+    this.toast('Metadata cleared. Reload folder to restore original transcripts.');
+  },
+
   toast(msg) {
     const t = document.getElementById('toast'); t.innerText = msg;
-    t.style.display = 'block'; setTimeout(() => t.style.display = 'none', 3000);
+    t.style.display = 'block'; setTimeout(() => t.style.display = 'none', 3500);
   }
 };
 
-document.getElementById('search').oninput = () => App.filterAndSort();
+const debouncedFilter = debounce(() => App.filterAndSort(), 300);
+document.getElementById('search').oninput = debouncedFilter;
 document.getElementById('filter-sel').onchange = () => App.filterAndSort();
 document.getElementById('sort-sel').onchange = () => App.filterAndSort();
+
+// Silence threshold slider wiring
+document.getElementById('dsp-trim').onchange = (e) => {
+  document.getElementById('silence-threshold-wrap').style.display = e.target.checked ? 'block' : 'none';
+};
+document.getElementById('silence-threshold').oninput = (e) => {
+  document.getElementById('silence-threshold-val').innerText = e.target.value;
+};
 
 document.addEventListener('keydown', (e) => {
   if(['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName) || document.activeElement.isContentEditable) return;
   if(e.code === 'Space') { e.preventDefault(); Player.toggle(); }
-  if(e.code === 'ArrowRight') { Player.next(); }
-  if(e.code === 'ArrowLeft') { Player.prev(); }
+  if(e.code === 'ArrowRight') Player.next();
+  if(e.code === 'ArrowLeft') Player.prev();
+  if(e.key === 'z' || e.key === 'Z') Settings.update('zen', !Settings.zen);
+  if(e.key === 'e' || e.key === 'E') App.exportTranscripts();
+  if(e.key === '?') document.getElementById('help-modal').classList.add('open');
+  if(e.code === 'Escape') document.getElementById('help-modal').classList.remove('open');
 });
 </script>
 
@@ -500,10 +621,55 @@ document.addEventListener('keydown', (e) => {
       App.toast("AI Model ready!");
     },
 
+    async transcribeAll() {
+      if (this.isProcessing) return App.toast("AI is currently busy...");
+      const missing = State.db.filter(item => !item.transcript);
+      if (!missing.length) return App.toast("All loaded files already have transcripts.");
+
+      const statusEl = document.getElementById('transcribe-queue-status');
+      const allBtn = document.getElementById('btn-transcribe-all');
+      this.stopQueue = false;
+      allBtn.innerText = "✕ Cancel Queue";
+      allBtn.onclick = () => { this.stopQueue = true; allBtn.onclick = () => window.WhisperAI.transcribeAll(); };
+      statusEl.style.display = 'block';
+
+      await this.init();
+
+      for (let i = 0; i < missing.length; i++) {
+        if (this.stopQueue) { App.toast("Queue cancelled."); break; }
+        const item = missing[i];
+        statusEl.innerText = `Queue: ${i + 1} / ${missing.length} — ${item.name}`;
+        try {
+          this.isProcessing = true;
+          const tempCtx = new (window.AudioContext || window.webkitAudioContext)();
+          const arrayBuffer = await item.file.arrayBuffer();
+          const decoded = await tempCtx.decodeAudioData(arrayBuffer);
+          const offlineCtx = new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(1, decoded.duration * 16000, 16000);
+          const src = offlineCtx.createBufferSource();
+          src.buffer = decoded; src.connect(offlineCtx.destination); src.start(0);
+          const resampled = await offlineCtx.startRendering();
+          const result = await this.model(resampled.getChannelData(0), { chunk_length_s: 30, stride_length_s: 5 });
+          const globalIdx = State.db.findIndex(x => x.id === item.id);
+          App.saveEdit(globalIdx, result.text.trim());
+          await tempCtx.close();
+        } catch(err) {
+          console.error('Queue error on', item.name, err);
+        } finally {
+          this.isProcessing = false;
+        }
+      }
+
+      statusEl.style.display = 'none';
+      allBtn.innerText = "📋 Transcribe All Missing";
+      allBtn.onclick = () => window.WhisperAI.transcribeAll();
+      App.render();
+      App.toast("Transcription queue complete.");
+    },
+
     async transcribeActive() {
       if (State.activeIdx === -1) return App.toast("Please play an audio file first.");
       if (this.isProcessing) return App.toast("AI is currently busy...");
-      
+
       const btn = document.getElementById('btn-transcribe');
       const file = State.db[State.activeIdx].file;
       
