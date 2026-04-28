@@ -19,7 +19,7 @@
   body[data-zen="true"] header, body[data-zen="true"] .controls, body[data-zen="true"] .sidebar { display: none !important; }
 
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: var(--bg); color: var(--text); font-family: var(--font-base); font-size: var(--font-size); min-height: 100vh; overflow-x: hidden; padding-bottom: 140px; display: flex; }
+  body { background: var(--bg); color: var(--text); font-family: var(--font-base); font-size: var(--font-size); min-height: 100vh; overflow-x: hidden; padding-bottom: 190px; display: flex; }
   
   /* Layout */
   .sidebar { width: 300px; border-right: 1px solid var(--border); padding: 20px; display: flex; flex-direction: column; gap: 20px; background: var(--surface); flex-shrink: 0; }
@@ -52,10 +52,10 @@
   #player { position: fixed; bottom: 0; left: 0; right: 0; background: var(--surface); border-top: 1px solid var(--accent); padding: 10px 20px; display: flex; align-items: center; gap: 15px; z-index: 1000; }
   #player.pip { bottom: 20px; right: 20px; left: auto; width: 400px; border: 1px solid var(--accent); border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,0.8); flex-direction: column; }
   
-  .waveform-container { flex: 1; height: 40px; background: var(--bg); position: relative; cursor: pointer; border-radius: 4px; overflow: hidden; width: 100%; }
-  #waveform-canvas { width: 100%; height: 100%; pointer-events: none; }
-  .playhead { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--red); left: 0; pointer-events: none; box-shadow: 0 0 10px var(--red); }
-  .loop-marker { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--accent); opacity: 0.5; pointer-events: none; }
+  .waveform-container { flex: 1; height: 80px; background: #060606; position: relative; cursor: pointer; border-radius: 4px; overflow: hidden; width: 100%; border: 1px solid rgba(200,168,75,0.12); }
+  #waveform-canvas { width: 100%; height: 100%; pointer-events: none; display: block; }
+  .playhead { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--red); left: 0; pointer-events: none; box-shadow: 0 0 8px var(--red), 0 0 2px #fff; }
+  .loop-marker { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--accent); opacity: 0.6; pointer-events: none; }
 
   #toast { position: fixed; bottom: 80px; right: 20px; background: var(--accent); color: var(--bg); padding: 10px 20px; z-index: 2000; display: none; font-weight: bold; border-radius: 4px; }
   
@@ -314,6 +314,8 @@ const Player = {
     this.panner = this.ctx.createStereoPanner();
     this.analyser = this.ctx.createAnalyser();
     this.analyser.fftSize = 2048;
+    this._freqData = new Uint8Array(this.analyser.frequencyBinCount);
+    this._timeData = new Uint8Array(this.analyser.frequencyBinCount);
 
     const freqs = [32, 64, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
     const eqContainer = document.getElementById('eq-container');
@@ -401,6 +403,7 @@ const Player = {
     this.pauseTime = this.ctx.currentTime - this.startTime;
     State.isPlaying = false;
     document.getElementById('btn-play').innerText = '▶';
+    if (this._wvCanvas) this._paintStatic();
   },
 
   toggle() { State.isPlaying ? this.pause() : this.startSource(); },
@@ -422,23 +425,133 @@ const Player = {
 
   drawWaveform() {
     const cvs = document.getElementById('waveform-canvas');
-    const c = cvs.getContext('2d');
-    cvs.width = cvs.offsetWidth; cvs.height = cvs.offsetHeight;
-    
-    const raw = this.audioBuffer.getChannelData(0);
-    const step = Math.ceil(raw.length / cvs.width);
-    c.clearRect(0,0,cvs.width,cvs.height);
-    c.fillStyle = getComputedStyle(document.body).getPropertyValue('--accent');
-    
-    for(let i=0; i<cvs.width; i++) {
-      let min = 1.0, max = -1.0;
-      for(let j=0; j<step; j++) {
-        const datum = raw[(i*step)+j];
-        if (datum < min) min = datum;
-        if (datum > max) max = datum;
+    const W = cvs.width  = cvs.offsetWidth  || 800;
+    const H = cvs.height = cvs.offsetHeight || 80;
+
+    // Build offscreen cache — one pixel column per canvas pixel, centered bars
+    this._wvCanvas = document.createElement('canvas');
+    this._wvCanvas.width = W; this._wvCanvas.height = H;
+    const wc = this._wvCanvas.getContext('2d');
+    const raw  = this.audioBuffer.getChannelData(0);
+    const step = Math.ceil(raw.length / W);
+    const accent = getComputedStyle(document.body).getPropertyValue('--accent').trim() || '#c8a84b';
+    wc.fillStyle = accent;
+    for (let i = 0; i < W; i++) {
+      let mn = 1.0, mx = -1.0;
+      for (let j = 0; j < step; j++) {
+        const d = raw[i * step + j] || 0;
+        if (d < mn) mn = d; if (d > mx) mx = d;
       }
-      c.fillRect(i, (1+min)*cvs.height/2, 1, Math.max(1, (max-min)*cvs.height/2));
+      const bh = Math.max(1, (mx - mn) * H / 2);
+      wc.fillRect(i, (H - bh) / 2, 1, bh);
     }
+
+    this._paintStatic();
+  },
+
+  _paintStatic() {
+    const cvs = document.getElementById('waveform-canvas');
+    const c = cvs.getContext('2d');
+    const W = cvs.width || cvs.offsetWidth;
+    const H = cvs.height || cvs.offsetHeight;
+    c.fillStyle = '#060606';
+    c.fillRect(0, 0, W, H);
+    this._drawGrid(c, W, H);
+    if (this._wvCanvas) {
+      c.globalAlpha = 0.38;
+      c.drawImage(this._wvCanvas, 0, 0);
+      c.globalAlpha = 1;
+    }
+    this._drawScanlines(c, W, H);
+  },
+
+  _drawGrid(c, W, H) {
+    c.save();
+    c.strokeStyle = 'rgba(200,168,75,0.06)';
+    c.lineWidth = 1;
+    for (let i = 1; i < 20; i++) { c.beginPath(); c.moveTo(i*W/20,0); c.lineTo(i*W/20,H); c.stroke(); }
+    for (let i = 1; i < 4;  i++) { c.beginPath(); c.moveTo(0,i*H/4);  c.lineTo(W,i*H/4);  c.stroke(); }
+    c.strokeStyle = 'rgba(200,168,75,0.18)';
+    c.beginPath(); c.moveTo(0,H/2); c.lineTo(W,H/2); c.stroke();
+    c.restore();
+  },
+
+  _drawScanlines(c, W, H) {
+    c.fillStyle = 'rgba(0,0,0,0.09)';
+    for (let y = 0; y < H; y += 4) c.fillRect(0, y, W, 1);
+  },
+
+  drawVisualizer() {
+    if (!this._wvCanvas) return;
+    const cvs = document.getElementById('waveform-canvas');
+    const c   = cvs.getContext('2d');
+    const W   = cvs.width, H = cvs.height;
+
+    // Background + grid
+    c.fillStyle = '#060606';
+    c.fillRect(0, 0, W, H);
+    this._drawGrid(c, W, H);
+
+    // Static waveform: brighter over played region, dim ahead
+    const progress = Math.min(1, Math.max(0, (this.ctx.currentTime - this.startTime) / this.duration));
+    const px = Math.floor(W * progress);
+    if (px > 0)  { c.globalAlpha = 0.28; c.drawImage(this._wvCanvas, 0, 0, px, H,   0, 0, px,   H); }
+    if (px < W)  { c.globalAlpha = 0.07; c.drawImage(this._wvCanvas, px, 0, W-px, H, px, 0, W-px, H); }
+    c.globalAlpha = 1;
+
+    // ── Frequency bars (log-scaled, mirrored top/bottom) ────────────────
+    this.analyser.getByteFrequencyData(this._freqData);
+    const bufLen   = this._freqData.length;
+    const barCount = 64;
+    const barW     = W / barCount;
+
+    for (let i = 0; i < barCount; i++) {
+      const fi = Math.floor(Math.pow(i / barCount, 1.5) * bufLen * 0.65);
+      const v  = this._freqData[fi] / 255;
+      if (v < 0.015) continue;
+
+      const bh = v * H * 0.47;
+      const x  = i * barW;
+      const bw = Math.max(1, barW - 1.5);
+      const hot = v > 0.62;
+      const a   = 0.55 + v * 0.45;
+
+      const gr = c.createLinearGradient(0, H/2 - bh, 0, H/2 + bh);
+      if (hot) {
+        gr.addColorStop(0,   `rgba(255,50,20,${a})`);
+        gr.addColorStop(0.35,`rgba(220,105,30,${a})`);
+        gr.addColorStop(0.5, `rgba(200,168,75,${a})`);
+        gr.addColorStop(0.65,`rgba(220,105,30,${a})`);
+        gr.addColorStop(1,   `rgba(255,50,20,${a})`);
+      } else {
+        gr.addColorStop(0,   `rgba(200,168,75,${v * 0.55})`);
+        gr.addColorStop(0.5, `rgba(200,168,75,${v * 0.95})`);
+        gr.addColorStop(1,   `rgba(200,168,75,${v * 0.55})`);
+      }
+
+      c.shadowColor = hot ? `rgba(255,65,15,${v * 0.75})` : `rgba(200,168,75,${v * 0.55})`;
+      c.shadowBlur  = 3 + v * 18;
+      c.fillStyle   = gr;
+      c.fillRect(x, H/2 - bh, bw, bh * 2);
+    }
+    c.shadowBlur = 0;
+
+    // ── Oscilloscope overlay (time-domain) ──────────────────────────────
+    this.analyser.getByteTimeDomainData(this._timeData);
+    c.beginPath();
+    c.strokeStyle = 'rgba(238,232,196,0.38)';
+    c.lineWidth   = 1;
+    c.shadowColor = 'rgba(238,232,196,0.18)';
+    c.shadowBlur  = 2;
+    const sw = W / this._timeData.length;
+    for (let i = 0; i < this._timeData.length; i++) {
+      const y = (this._timeData[i] / 128) * (H / 2);
+      i === 0 ? c.moveTo(0, y) : c.lineTo(i * sw, y);
+    }
+    c.stroke();
+    c.shadowBlur = 0;
+
+    this._drawScanlines(c, W, H);
   },
 
   updateLoop() {
@@ -446,26 +559,25 @@ const Player = {
     const curr = this.ctx.currentTime - this.startTime;
     const p = (curr / this.duration) * 100;
     document.getElementById('playhead').style.left = `${p}%`;
-    const fmt = (t) => { const m = Math.floor(t/60); const s = Math.floor(t%60); return `${m}:${s.toString().padStart(2,'0')}`; };
+    const fmt = (t) => { const m=Math.floor(t/60); const s=Math.floor(t%60); return `${m}:${s.toString().padStart(2,'0')}`; };
     document.getElementById('time-display').innerText = `${fmt(curr)} / ${fmt(this.duration)}`;
 
-    // FIXED: Dynamic playbackRate manipulation for seamless silence skipping
+    // Draw casefile visualizer (also populates _freqData for silence detection below)
+    this.drawVisualizer();
+
+    // Silence detection — reuse _freqData already fetched by drawVisualizer
     if(document.getElementById('dsp-trim').checked) {
-      const data = new Uint8Array(this.analyser.frequencyBinCount);
-      this.analyser.getByteFrequencyData(data);
-      const avg = data.reduce((a,b)=>a+b,0)/data.length;
-      
+      const avg = this._freqData.reduce((a,b)=>a+b,0) / this._freqData.length;
       const silenceThreshold = parseFloat(document.getElementById('silence-threshold').value) || 2;
       if(avg <= silenceThreshold) {
         this.silenceFrames++;
-        if(this.silenceFrames > 5) this.source.playbackRate.value = 4.0; // Fast forward
+        if(this.silenceFrames > 5) this.source.playbackRate.value = 4.0;
       } else {
         this.silenceFrames = 0;
-        this.source.playbackRate.value = document.getElementById('speed-sel').value; // Resume
+        this.source.playbackRate.value = document.getElementById('speed-sel').value;
       }
     } else {
-        // Ensure regular speed if unchecked mid-silence
-        this.source.playbackRate.value = document.getElementById('speed-sel').value; 
+      this.source.playbackRate.value = document.getElementById('speed-sel').value;
     }
 
     if(State.loopB !== null && curr >= State.loopB) { this.pause(); this.pauseTime = State.loopA; this.startSource(); }
